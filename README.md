@@ -1,3 +1,3 @@
-# ARFITED - IB 
+# ARFITEC - IB 
 
-Contributors: Damien Zanini, Romain Billy, Jose Robledo, Luis Palomino
+Contributors: Damien Zanini, Romain Bruno Billy, Jose Robledo, Luis Palomino
