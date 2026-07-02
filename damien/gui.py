@@ -104,6 +104,7 @@ class NeutronApp:
 
         self.tab_analysis = tk.Frame(self.notebook)
         self.tab_config = tk.Frame(self.notebook)
+        self.tab_stats = tk.Frame(self.notebook)
 
         self.notebook.add(self.tab_analysis, text=" Analysis & Control ")
         self.notebook.add(self.tab_config, text=" Physical Parameters ")
@@ -609,6 +610,52 @@ class NeutronApp:
         )
         self.apply_params_button.grid(row=6, column=0, columnspan=2, pady=25)
 
+    
+    # ==================================================
+        # TAB 3: FIT RESULTS & STATS PANEL
+        # ==================================================
+        self.stats_frame = tk.LabelFrame(
+            self.tab_stats,
+            text=" Fit Parameters & Numerical Results ",
+            bg="#f8f9fa",
+            font=("Segoe UI", 12, "bold"),
+            padx=20,
+            pady=20
+        )
+        self.stats_frame.pack(padx=40, pady=40, fill=tk.BOTH, expand=True)
+
+        # Zone de texte principale pour afficher les résultats bruts
+        self.txt_stats = tk.Text(
+            self.stats_frame,
+            wrap=tk.WORD,
+            font=("Consolas", 11),
+            bg="#ffffff",
+            fg="#2c3e50",
+            bd=1,
+            highlightthickness=1
+        )
+        self.txt_stats.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Message initial par défaut
+        self.txt_stats.insert(tk.END, "No fit has been executed yet. Run a Maxwellian Fit to display numerical results here.")
+        self.txt_stats.config(state=tk.DISABLED)
+
+        # Bouton pour copier rapidement les données scientifiques
+        self.copy_stats_button = tk.Button(
+            self.stats_frame,
+            text="Copy Results to Clipboard",
+            command=self.copy_stats_to_clipboard,
+            bg="#34495e",
+            fg="white",
+            font=("Segoe UI", 11, "bold"),
+            padx=15,
+            pady=5,
+            bd=0,
+            cursor="hand2"
+        )
+        self.copy_stats_button.pack(side=tk.LEFT)
+
+
     # ======================================================
     # FONCTIONS & MÉTHODES
     # ======================================================
@@ -791,25 +838,91 @@ class NeutronApp:
             import plot as pt
             base_kwargs = {"frame": self.plot_frame}
 
-            # Famille 1 : Graphiques standards (signatures identiques)
+            # --- FAMILLE 1 : Graphiques standards (dont Plot 6) ---
             if numero_plot in ["1", "2", "3", "4", "5", "6", "9", "10"]:
                 func = getattr(pt, f"plot_{numero_plot}")
                 self.current_fig = func(fichiers, self.datasets, **base_kwargs)
                 
-            # Famille 2 : Ajustements Maxwell (7.1, 7.2) - Retourne des résultats de fit
+                # Extraction spécifique pour le Plot 6 (Grid Search Maxwell Fit)
+                if numero_plot == "6":
+                    from physics import fit_maxwellian_grid_search
+                    
+                    summary = "==================================================\n"
+                    summary += " GRID SEARCH MAXWELLIAN FIT RESULTS\n"
+                    summary += "==================================================\n\n"
+                    
+                    # On recalcule rapidement les constantes pour les afficher dans l'IHM en anglais
+                    for nom in fichiers:
+                        data = self.datasets[nom]
+                        mask = (data['ToF'] >= PARAMS['t_min']) & (data['ToF'] <= PARAMS['t_max'])
+                        ToF_fit = data['ToF'][mask]
+                        flux_fit = data['flux_tof'][mask]
+                        
+                        T_best, erreur_min = fit_maxwellian_grid_search(
+                            ToF_fit, flux_fit, data['meta']['path_length']
+                        )
+                        
+                        summary += f"Dataset File : {nom}\n"
+                        summary += f"  -> Best Fit Temperature : {T_best:.2f} K\n"
+                        summary += f"  -> Minimum Residual Error : {erreur_min:.2e}\n"
+                        summary += f"  -> Active Time Range : {PARAMS['t_min']*1e6:.1f} to {PARAMS['t_max']*1e6:.1f} µs\n\n"
+                    
+                    self.update_stats_display(summary)
+                
+            # --- FAMILLE 2 : Ajustements Maxwell Avancés (7.1, 7.2) ---
             elif numero_plot in ["7.1", "7.2"]:
                 self.current_fig, self.fit_results = pt.plot_7(
                     fichiers, self.datasets, choice_sub=float(numero_plot), **base_kwargs
                 )
                 
-            # Famille 3 : Spectres d'énergie (8.1, 8.2) - Nécessite les résultats du fit
+                # Lecture et mise en forme du dictionnaire fit_results renvoyé par plot_7
+                if self.fit_results:
+                    summary = "==================================================\n"
+                    summary += f" ADVANCED CURVE FIT RESULTS (Plot {numero_plot})\n"
+                    summary += "==================================================\n\n"
+                    summary += f"Primary Analyzed File : {fichiers[0]}\n\n"
+                    summary += "Extracted Physical Constants & Parameters :\n"
+                    
+                    # Correspondance des clés pour un affichage propre en anglais
+                    key_mapping = {
+                        "T_1": "Pure Maxwellian Temperature (T1)",
+                        "T_1_epi": "Maxwellian + Epithermal Temperature (T1_epi)",
+                        "r_squared_1": "R² Coefficient (Pure Maxwellian)",
+                        "r_squared_2": "R² Coefficient (Grouped Maxwellian)",
+                        "r_squared_1_epi": "R² Coefficient (Maxwellian + Epithermal)",
+                        "a1_tof_pure_1": "Amplitude Factor a1 (Model 1)",
+                        "a1_tof_pure_2": "Amplitude Factor a1 (Model 2)",
+                        "Ed_epi_1": "Epithermal Cutoff Energy (Ed)",
+                        "b_epi_1": "Epithermal Parameter b",
+                        "beta_epi_1": "Epithermal Parameter beta"
+                    }
+                    
+                    for key, val in self.fit_results.items():
+                        # On filtre les tableaux numpy de prédiction pour ne garder que les scalaires
+                        if isinstance(val, (int, float, np.float64, np.int64)):
+                            label_en = key_mapping.get(key, key)
+                            summary += f"  -> {label_en} : {val:.4f}\n"
+                            
+                    self.update_stats_display(summary)
+                
+            # --- FAMILLE 3 : Spectres d'énergie (8.1, 8.2) ---
             elif numero_plot in ["8.1", "8.2"]:
                 if self.fit_results is None:
                     messagebox.showwarning("Warning", "Please execute plot 7 first to compute fit results.")
                     return
+                
                 self.current_fig = pt.plot_8(
                     fichiers, self.datasets, self.fit_results, choice_sub=float(numero_plot), **base_kwargs
                 )
+                
+                # Optionnel : Afficher un rappel textuel que les statistiques de ce tracé découlent du fit 7
+                summary = "==================================================\n"
+                summary += f" ENERGY SPECTRUM MODELING (Plot {numero_plot})\n"
+                summary += "==================================================\n\n"
+                summary += f"Based on prior fit parameters from: {fichiers[0]}\n"
+                summary += "Plots display converted Time-of-Flight configurations into Energy scale (eV).\n"
+                summary += "Review 'Fit Results & Stats' tab parameters for exact scaling coefficients."
+                self.update_stats_display(summary)
                 
             # Famille 4 : Sections efficaces (11, 12) - Nécessite les paramètres physiques et références
             elif numero_plot in ["11", "12"]:
@@ -822,56 +935,121 @@ class NeutronApp:
                     fichier_ref=fichier_ref, 
                     **base_kwargs
                 )
-            
+
+            self._process_plot_statistics(numero_plot, fichiers, choix)
             self.update_live_zoom()
+            self._reconfigure_y_sliders() # Appel de la fonction externalisée
             
-            # --- CONFIGURATION AUTOMATIQUE HAUTE PRÉCISION DES CURSEURS Y ---
-            # --- CONFIGURATION AUTOMATIQUE AVEC CURSEURS CENTRÉS AU MILIEU ---
-            if hasattr(self, 'current_fig') and self.current_fig.axes:
-                ax_auto = self.current_fig.axes[0]
-                ymin_auto, ymax_auto = ax_auto.get_ylim()
-                
-                # 1. Désactivation temporaire du verrouillage Y
-                self.apply_y_limits = False 
-                
-                # 2. Calcul de la plage de données réelle du graphique
-                plage = ymax_auto - ymin_auto
-                if plage <= 0: 
-                    plage = 1.0
-                
-                # Un pas ultra-fin basé sur la nouvelle grande plage de déplacement
-                pas_haute_precision = (plage * 2) / 2000.0  
-                
-                # 3. Détection et centrage individuel de chaque curseur au milieu (50%) de sa course
-                def reconfigurer_les_sliders(parent):
-                    for child in parent.winfo_children():
-                        if isinstance(child, tk.Scale):
-                            try:
-                                var_liee = str(child.cget('variable'))
-                                if var_liee == str(self.display_y_min):
-                                    # Valeur initiale ymin_auto placée exactement au centre
-                                    child.configure(from_=ymin_auto - plage, to=ymin_auto + plage, resolution=pas_haute_precision, digits=7)
-                                elif var_liee == str(self.display_y_max):
-                                    # Valeur initiale ymax_auto placée exactement au centre
-                                    child.configure(from_=ymax_auto - plage, to=ymax_auto + plage, resolution=pas_haute_precision, digits=7)
-                            except Exception:
-                                pass
-                        if child.winfo_children():
-                            reconfigurer_les_sliders(child)
-
-                # Applique la reconfiguration physique
-                reconfigurer_les_sliders(self.root)
-                
-                # 4. Injection des valeurs initiales
-                self.display_y_min.set(ymin_auto)
-                self.display_y_max.set(ymax_auto)
-
-            # (Ligne existante dans ton code)
             if not self.is_replaying:
                 self.add_to_history(choix, fichiers)
 
         except Exception as e:
             messagebox.showerror("Plot Error", str(e))
+
+    
+    def _reconfigure_y_sliders(self):
+        """Ajuste automatiquement les bornes des curseurs Y par rapport aux données du graphique."""
+        if not hasattr(self, 'current_fig') or not self.current_fig.axes:
+            return
+
+        ax_auto = self.current_fig.axes[0]
+        ymin_auto, ymax_auto = ax_auto.get_ylim()
+        
+        # 1. Désactivation temporaire du verrouillage Y
+        self.apply_y_limits = False 
+        
+        # 2. Calcul de la plage de données réelle du graphique
+        plage = ymax_auto - ymin_auto
+        if plage <= 0: 
+            plage = 1.0
+        
+        # Un pas ultra-fin basé sur la nouvelle grande plage de déplacement
+        pas_haute_precision = (plage * 2) / 2000.0  
+        
+        # 3. Détection et centrage individuel de chaque curseur au milieu (50%) de sa course
+        def reconfigurer_les_sliders(parent):
+            for child in parent.winfo_children():
+                if isinstance(child, tk.Scale):
+                    try:
+                        var_liee = str(child.cget('variable'))
+                        if var_liee == str(self.display_y_min):
+                            # Valeur initiale ymin_auto placée exactement au centre
+                            child.configure(from_=ymin_auto - plage, to=ymin_auto + plage, resolution=pas_haute_precision, digits=7)
+                        elif var_liee == str(self.display_y_max):
+                            # Valeur initiale ymax_auto placée exactement au centre
+                            child.configure(from_=ymax_auto - plage, to=ymax_auto + plage, resolution=pas_haute_precision, digits=7)
+                    except Exception:
+                        pass
+                if child.winfo_children():
+                    reconfigurer_les_sliders(child)
+
+        # Applique la reconfiguration physique
+        reconfigurer_les_sliders(self.root)
+        
+        # 4. Injection des valeurs initiales
+        self.display_y_min.set(ymin_auto)
+        self.display_y_max.set(ymax_auto)
+
+
+
+    def _process_plot_statistics(self, numero_plot, fichiers, choix):
+        """Gère l'extraction, la traduction et l'affichage des données numériques selon le tracé."""
+        # Cas par défaut si aucun résultat n'est attendu
+        if numero_plot not in ["6", "7.1", "7.2", "8.1", "8.2"]:
+            self.update_stats_display("No fit has been executed yet. Run a Maxwellian Fit to display numerical results here.")
+            return
+
+        summary = "==================================================\n"
+        
+        # --- Formatage pour le Plot 6 ---
+        if numero_plot == "6":
+            from physics import fit_maxwellian_grid_search
+            summary += " GRID SEARCH MAXWELLIAN FIT RESULTS\n"
+            summary += "==================================================\n\n"
+            for nom in fichiers:
+                data = self.datasets[nom]
+                mask = (data['ToF'] >= PARAMS['t_min']) & (data['ToF'] <= PARAMS['t_max'])
+                T_best, erreur_min = fit_maxwellian_grid_search(data['ToF'][mask], data['flux_tof'][mask], data['meta']['path_length'])
+                
+                summary += f"Dataset File : {nom}\n"
+                summary += f"  -> Best Fit Temperature : {T_best:.2f} K\n"
+                summary += f"  -> Minimum Residual Error : {erreur_min:.2e}\n"
+                summary += f"  -> Active Time Range : {PARAMS['t_min']*1e6:.1f} to {PARAMS['t_max']*1e6:.1f} µs\n\n"
+
+        # --- Formatage pour les Plots 7.1 et 7.2 ---
+        elif numero_plot in ["7.1", "7.2"] and self.fit_results:
+            summary += f" ADVANCED CURVE FIT RESULTS (Plot {numero_plot})\n"
+            summary += "==================================================\n\n"
+            summary += f"Primary Analyzed File : {fichiers[0]}\n\n"
+            summary += "Extracted Physical Constants & Parameters :\n"
+            
+            key_mapping = {
+                "T_1": "Pure Maxwellian Temperature (T1)",
+                "T_1_epi": "Maxwellian + Epithermal Temperature (T1_epi)",
+                "r_squared_1": "R² Coefficient (Pure Maxwellian)",
+                "r_squared_2": "R² Coefficient (Grouped Maxwellian)",
+                "r_squared_1_epi": "R² Coefficient (Maxwellian + Epithermal)",
+                "a1_tof_pure_1": "Amplitude Factor a1 (Model 1)",
+                "a1_tof_pure_2": "Amplitude Factor a1 (Model 2)",
+                "Ed_epi_1": "Epithermal Cutoff Energy (Ed)",
+                "b_epi_1": "Epithermal Parameter b",
+                "beta_epi_1": "Epithermal Parameter beta"
+            }
+            for key, val in self.fit_results.items():
+                if isinstance(val, (int, float, np.float64, np.int64)):
+                    summary += f"  -> {key_mapping.get(key, key)} : {val:.4f}\n"
+
+        # --- Formatage pour les Plots 8.1 et 8.2 ---
+        elif numero_plot in ["8.1", "8.2"]:
+            summary += f" ENERGY SPECTRUM MODELING (Plot {numero_plot})\n"
+            summary += "==================================================\n\n"
+            summary += f"Based on prior fit parameters from: {fichiers[0]}\n"
+            summary += "Plots display converted Time-of-Flight configurations into Energy scale (eV).\n"
+            summary += "Review 'Fit Results & Stats' tab parameters for exact scaling coefficients."
+
+        # Envoi final vers le widget de l'IHM
+        self.update_stats_display(summary)
+
             
     def add_to_history(self, plot_name, files):
         """Ajoute un tracé réussi au menu déroulant de l'historique."""
@@ -1209,3 +1387,17 @@ class NeutronApp:
 
         except Exception as e:
             print(f"Erreur update_live_zoom : {e}")
+
+    
+    def update_stats_display(self, text_content):
+        """Met à jour dynamiquement la zone de texte de l'onglet de statistiques."""
+        self.txt_stats.config(state=tk.NORMAL)
+        self.txt_stats.delete("1.0", tk.END)
+        self.txt_stats.insert(tk.END, text_content)
+        self.txt_stats.config(state=tk.DISABLED)
+
+    def copy_stats_to_clipboard(self):
+        """Copie le contenu de la zone de texte directement dans le presse-papier."""
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.txt_stats.get("1.0", tk.END).strip())
+        messagebox.showinfo("Success", "Results successfully copied to clipboard.")
