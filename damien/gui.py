@@ -750,8 +750,27 @@ class NeutronApp:
             self.history_combobox.configure(values=[])
             self.clear_plot()
 
+
+    def _ask_reference_files(self, multiple=False):
+        """Gère l'ouverture de l'explorateur pour les fichiers de référence (Plots 11 et 12)."""
+        if not messagebox.askyesno("Reference File", "Do you want to compare with a reference file?"):
+            return ""
+        
+        options = {
+            "title": "Select reference cross section file(s)" if multiple else "Select reference cross section file",
+            "filetypes": [("Data files", "*.dat *.txt"), ("All files", "*.*")],
+            "initialdir": "data"
+        }
+        
+        if multiple:
+            paths = filedialog.askopenfilenames(**options)
+            return list(paths) if paths else ""
+        else:
+            path = filedialog.askopenfilename(**options)
+            return path if path else ""
+        
+
     def execute_plot(self):
-        # Aucune altération du curseur ou blocage "is_loading" ici car l'affichage est instantané
         choix = self.plot_combobox.get()
         numero_plot = choix.split('-')[0].strip()
         
@@ -759,85 +778,50 @@ class NeutronApp:
             messagebox.showwarning("Warning", "Please load data files first.")
             return
         
-        if self.ordre_selection:
-            fichiers = [self.file_listbox.get(i) for i in self.ordre_selection]
-        else:
+        if not self.ordre_selection:
             messagebox.showwarning("Selection Error", "Please select at least one file in the list to plot.")   
             return
 
+        fichiers = [self.file_listbox.get(i) for i in self.ordre_selection]
+
         try:
             self.clear_plot()
-        
-            if numero_plot == "1":
-                self.current_fig = plot_1(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "2":
-                self.current_fig = plot_2(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "3":
-                self.current_fig = plot_3(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "4":
-                self.current_fig = plot_4(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "5":
-                self.current_fig = plot_5(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "6":
-                self.current_fig = plot_6(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "7.1":
-                self.current_fig, self.fit_results = plot_7(fichiers, self.datasets, choice_sub=7.1, frame=self.plot_frame)
-
-            elif numero_plot == "7.2":
-                self.current_fig, self.fit_results = plot_7(fichiers, self.datasets, choice_sub=7.2, frame=self.plot_frame)
-
-            elif numero_plot == "8.1":
-                if self.fit_results is None:
-                    messagebox.showwarning("Warning", "Please execute plot 7 first to compute fit results.")
-                    return
-                self.current_fig = plot_8(fichiers, self.datasets, self.fit_results, choice_sub=8.1, frame=self.plot_frame)
-
-            elif numero_plot == "8.2":
-                if self.fit_results is None:
-                    messagebox.showwarning("Warning", "Please execute plot 7 first to compute fit results.")
-                    return
-                self.current_fig = plot_8(fichiers, self.datasets, self.fit_results, choice_sub=8.2, frame=self.plot_frame)
-                
-            elif numero_plot == "9":
-                self.current_fig = plot_9(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "10":
-                self.current_fig = plot_10(fichiers, self.datasets, frame=self.plot_frame)
-                
-            elif numero_plot == "11":
-                choix_ref = messagebox.askyesno("Reference File", "Do you want to compare with a reference file?")
-                fichier_ref = ""
-                if choix_ref:
-                    chemins_complets_ref = filedialog.askopenfilenames(
-                        title="Select reference cross section file(s) (3 columns)",
-                        filetypes=[("Data files", "*.dat *.txt"), ("All files", "*.*")],
-                        initialdir="data"
-                    )
-                    if chemins_complets_ref:
-                        # store as a list so plot_11 can iterate over multiple refs
-                        fichier_ref = list(chemins_complets_ref)
-
-                self.current_fig = plot_11(fichiers, self.datasets, thickness=PARAMS["thickness"], atom_density=PARAMS["atom_density"], fichier_ref=fichier_ref, frame=self.plot_frame)
             
-            elif numero_plot == "12":
-                choix_ref = messagebox.askyesno("Reference File", "Do you want to compare with a reference file?")
-                fichier_ref = ""
-                if choix_ref:
-                    chemin_complet_ref = filedialog.askopenfilename(
-                        title="Select reference cross section file (3 columns)",
-                        filetypes=[("Data files", "*.dat *.txt"), ("All files", "*.*")],
-                        initialdir="data"
-                    )
-                    if chemin_complet_ref:
-                        fichier_ref = chemin_complet_ref 
+            # Import du module complet pour utiliser getattr dynamiquement
+            import plot as pt
+            base_kwargs = {"frame": self.plot_frame}
 
-                self.current_fig = plot_12(fichiers, self.datasets, thickness=PARAMS["thickness"], atom_density=PARAMS["atom_density"], fichier_ref=fichier_ref, frame=self.plot_frame)
+            # Famille 1 : Graphiques standards (signatures identiques)
+            if numero_plot in ["1", "2", "3", "4", "5", "6", "9", "10"]:
+                func = getattr(pt, f"plot_{numero_plot}")
+                self.current_fig = func(fichiers, self.datasets, **base_kwargs)
+                
+            # Famille 2 : Ajustements Maxwell (7.1, 7.2) - Retourne des résultats de fit
+            elif numero_plot in ["7.1", "7.2"]:
+                self.current_fig, self.fit_results = pt.plot_7(
+                    fichiers, self.datasets, choice_sub=float(numero_plot), **base_kwargs
+                )
+                
+            # Famille 3 : Spectres d'énergie (8.1, 8.2) - Nécessite les résultats du fit
+            elif numero_plot in ["8.1", "8.2"]:
+                if self.fit_results is None:
+                    messagebox.showwarning("Warning", "Please execute plot 7 first to compute fit results.")
+                    return
+                self.current_fig = pt.plot_8(
+                    fichiers, self.datasets, self.fit_results, choice_sub=float(numero_plot), **base_kwargs
+                )
+                
+            # Famille 4 : Sections efficaces (11, 12) - Nécessite les paramètres physiques et références
+            elif numero_plot in ["11", "12"]:
+                fichier_ref = self._ask_reference_files(multiple=(numero_plot == "11"))
+                func = getattr(pt, f"plot_{numero_plot}")
+                self.current_fig = func(
+                    fichiers, self.datasets, 
+                    thickness=PARAMS["thickness"], 
+                    atom_density=PARAMS["atom_density"], 
+                    fichier_ref=fichier_ref, 
+                    **base_kwargs
+                )
             
             self.update_live_zoom()
             
