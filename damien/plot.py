@@ -526,18 +526,45 @@ def plot_11(fichiers, datasets, thickness=0.8, atom_density=8.49e22, fichier_ref
     courbe_m1 = None      
     courbe_active = None  
     
-    # 2. Tracé du fichier de référence externe si configuré (délégué à physics.read_reference_file)
+    # 2. Tracé du(s) fichier(s) de référence externe si configuré (délégué à physics.read_reference_file)
+    amps_from_refs = []
     if fichier_ref:
+        # Normalize to iterable of paths
+        refs = fichier_ref if isinstance(fichier_ref, (list, tuple, np.ndarray)) else [fichier_ref]
         try:
-            nom_fichier_base, E_ref, sigma_ref, unc_ref, mask_ref, E_plot = read_reference_file(fichier_ref, E_min, E_max)
-            if unc_ref is not None:
-                p_ref = ax.errorbar(E_plot, sigma_ref[mask_ref], yerr=unc_ref[mask_ref], 
-                                     fmt='-', color='black', linewidth=1.5, label=f"Ref: {nom_fichier_base}")
-                p_ref[2][0].set_color((0, 0, 0, 0.2))
-            else:
-                ax.plot(E_plot, sigma_ref[mask_ref], '-', color='black', linewidth=1.5, label=f"Ref: {nom_fichier_base}")
+            for i_ref, ref_path in enumerate(refs):
+                try:
+                    nom_fichier_base, E_ref, sigma_ref, unc_ref, mask_ref, E_plot = read_reference_file(ref_path, E_min, E_max)
+                    # choose color: first ref in black, others from cycle
+                    if i_ref == 0:
+                        color = 'black'
+
+                    if unc_ref is not None:
+                        p_ref = ax.errorbar(E_plot, sigma_ref[mask_ref], yerr=unc_ref[mask_ref], 
+                                             fmt='-', linewidth=1.5, label=f"Ref: {nom_fichier_base}")
+                        # soften errorbars alpha if black
+                        if color == 'black':
+                            p_ref[2][0].set_color((0, 0, 0, 0.2))
+                    else:
+                        ax.plot(E_plot, sigma_ref[mask_ref], '-', linewidth=1.5, label=f"Ref: {nom_fichier_base}")
+
+                    # compute amplitude estimate for this reference
+                    try:
+                        amp_i = compute_amp_init_from_ref(sigma_ref, mask_ref, cross_sec_m1_raw, mask_E0)
+                        amps_from_refs.append(amp_i)
+                    except Exception:
+                        pass
+
+                except Exception as e_ref:
+                    print(f"Impossible de lire le fichier de référence '{ref_path}': {e_ref}")
         except Exception as e:
-            print(f"Impossible de lire le fichier de référence : {e}")
+            print(f"Erreur lors du traitement des fichiers de référence : {e}")
+
+    # If we collected amplitudes from one or more references, take their mean as initial amplitude
+    if amps_from_refs:
+        amp_init = float(np.mean(amps_from_refs))
+    elif not fichier_ref:
+        amp_init = 1.0
             
     flux0_tof = data_flux0['flux_tof_ungrouped']
     sample_tof = data_sample['flux_tof_ungrouped']

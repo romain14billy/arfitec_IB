@@ -814,13 +814,14 @@ class NeutronApp:
                 choix_ref = messagebox.askyesno("Reference File", "Do you want to compare with a reference file?")
                 fichier_ref = ""
                 if choix_ref:
-                    chemin_complet_ref = filedialog.askopenfilename(
-                        title="Select reference cross section file (3 columns)",
+                    chemins_complets_ref = filedialog.askopenfilenames(
+                        title="Select reference cross section file(s) (3 columns)",
                         filetypes=[("Data files", "*.dat *.txt"), ("All files", "*.*")],
                         initialdir="data"
                     )
-                    if chemin_complet_ref:
-                        fichier_ref = chemin_complet_ref 
+                    if chemins_complets_ref:
+                        # store as a list so plot_11 can iterate over multiple refs
+                        fichier_ref = list(chemins_complets_ref)
 
                 self.current_fig = plot_11(fichiers, self.datasets, thickness=PARAMS["thickness"], atom_density=PARAMS["atom_density"], fichier_ref=fichier_ref, frame=self.plot_frame)
             
