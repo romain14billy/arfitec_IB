@@ -3,3 +3,6 @@ badfile*
 *.png
 *.gif
 *.dat
+*__pycache__/
+*.vscode*
+.DS_Store
