@@ -231,39 +231,76 @@ class NeutronApp:
         # ==================================================
         self.plot_label = tk.Label(
             self.control_frame,
-            text="Analysis Type",
+            text="Analysis Selection",
             bg=BG_DARK,
             fg=TEXT_LIGHT,
             font=FONT_BOLD
         )
         self.plot_label.pack(pady=(15, 2))
 
-        self.plot_options = [
-            "1 - Grouping Comparison",
-            "2 - Dead Time Correction",
-            "3 - Efficiency vs Energy",
-            "4 - Efficiency vs ToF",
-            "5 - Maxwellian Comparison",
-            "6 - Least Square Maxwell Fit",
-            "7.1 - Curve Fit Maxwell (ToF view)",
-            "7.2 - Curve Fit Maxwell (ToF + Epi)",
-            "8.1 - Energy Spectrum (ToF convert)",
-            "8.2 - Energy Spectrum (ToF + Epi )",
-            "9 - Reactor Power Comparison",
-            "10 - Reactor Power vs Neutron Rate",
-            "11 - Cross Section Grouping Comparision",
-            "12 - Cross Section",
-        ]
+        # Variable pour stocker le tracé actuellement sélectionné
+        self.selected_plot_id = "1"  # Valeur par défaut
+        self.selected_plot_label = tk.StringVar(value="1 - Grouping Comparison")
 
-        self.plot_combobox = ttk.Combobox(
+        # Bouton principal qui va déclencher l'ouverture du menu
+        self.select_plot_button = tk.Button(
             self.control_frame,
-            values=self.plot_options,
-            state="readonly",
-            width=28,
-            font=("Segoe UI", 9)
+            textvariable=self.selected_plot_label,
+            command=self.show_analysis_menu,
+            font=("Segoe UI", 9, "bold"),
+            bg="#34495e",
+            fg="#f1c40f", # Jaune pour indiquer que c'est une action importante
+            activebackground="#5d6d7e",
+            activeforeground="#f1c40f",
+            bd=1, relief="raised", height=2, width=26, cursor="hand2"
         )
-        self.plot_combobox.pack(pady=5)
-        self.plot_combobox.current(0)
+        self.select_plot_button.pack(pady=5)
+
+        # Création du menu racine invisible en mémoire
+        self.analysis_menu = Menu(self.root, tearoff=0)
+
+        # 1er sous-menu : ToF Experiment
+        self.tof_submenu = Menu(self.analysis_menu, tearoff=0)
+        self.analysis_menu.add_cascade(label="Time-of-Flight (ToF) Experiment", menu=self.tof_submenu)
+        
+        # Ajout des options ToF existantes
+        tof_options = [
+            ("1 - Grouping Comparison", "1"),
+            ("2 - Dead Time Correction", "2"),
+            ("3 - Efficiency vs Energy", "3"),
+            ("4 - Efficiency vs ToF", "4"),
+            ("5 - Maxwellian Comparison", "5"),
+            ("6 - Least Square Maxwell Fit", "6"),
+            ("7.1 - Curve Fit Maxwell (ToF view)", "7.1"),
+            ("7.2 - Curve Fit Maxwell (ToF + Epi)", "7.2"),
+            ("8.1 - Energy Spectrum (ToF convert)", "8.1"),
+            ("8.2 - Energy Spectrum (ToF + Epi)", "8.2"),
+            ("9 - Reactor Power Comparison", "9"),
+            ("10 - Reactor Power vs Neutron Rate", "10"),
+            ("11 - Cross Section", "11"),
+            ("12 - Cross Section ref file", "12"),
+        ]
+        for label, p_id in tof_options:
+            self.tof_submenu.add_command(
+                label=label, 
+                command=lambda l=label, i=p_id: self._set_current_analysis(l, i)
+            )
+
+        # 2e sous-menu : NAA Experiment
+        self.naa_submenu = Menu(self.analysis_menu, tearoff=0)
+        self.analysis_menu.add_cascade(label="Neutron Activation Analysis (NAA)", menu=self.naa_submenu)
+        
+        # Exemple d'options NAA (à adapter selon les fonctions de plot_NAA.py)
+        naa_options = [
+            ("Gamma Spectrum Analysis", "NAA_1"),
+            ("Decay Curve Fitting", "NAA_2"),
+            ("Elemental Concentration", "NAA_3"),
+        ]
+        for label, p_id in naa_options:
+            self.naa_submenu.add_command(
+                label=label, 
+                command=lambda l=label, i=p_id: self._set_current_analysis(l, i)
+            )
 
         # ==================================================
         # PANNEAU GAUCHE : ACTIONS COMPACTES ET DISTINCTES
@@ -819,8 +856,8 @@ class NeutronApp:
         
 
     def execute_plot(self):
-        choix = self.plot_combobox.get()
-        numero_plot = choix.split('-')[0].strip()
+        numero_plot = self.selected_plot_id
+        choix = self.selected_plot_label.get()
         
         if not self.datasets:
             messagebox.showwarning("Warning", "Please load data files first.")
@@ -839,8 +876,18 @@ class NeutronApp:
             import plot as pt
             base_kwargs = {"frame": self.plot_frame}
 
+            # --- ROUTAGE DES PHÉNOMÈNES NAA ---
+            if numero_plot.startswith("NAA_"):
+                import plot_NAA as pt_naa
+                if numero_plot == "NAA_1":
+                    self.current_fig = pt_naa.plot_gamma_spectrum(fichiers, self.datasets, **base_kwargs)
+                elif numero_plot == "NAA_2":
+                    self.current_fig = pt_naa.plot_decay_curve(fichiers, self.datasets, **base_kwargs)
+                elif numero_plot == "NAA_3":
+                    self.current_fig = pt_naa.plot_concentration(fichiers, self.datasets, **base_kwargs)
+
             # --- FAMILLE 1 : Graphiques standards (dont Plot 6) ---
-            if numero_plot in ["1", "2", "3", "4", "5", "6", "9", "10"]:
+            elif numero_plot in ["1", "2", "3", "4", "5", "6", "9", "10"]:
                 func = getattr(pt, f"plot_{numero_plot}")
                 self.current_fig = func(fichiers, self.datasets, **base_kwargs)
                 
@@ -930,9 +977,7 @@ class NeutronApp:
                 fichier_ref = self._ask_reference_files(multiple=(numero_plot == "11"))
                 func = getattr(pt, f"plot_{numero_plot}")
                 self.current_fig = func(
-                    fichiers, self.datasets, 
-                    thickness=PARAMS["thickness"], 
-                    atom_density=PARAMS["atom_density"], 
+                    fichiers, self.datasets,  
                     fichier_ref=fichier_ref, 
                     **base_kwargs
                 )
@@ -1131,6 +1176,21 @@ class NeutronApp:
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.current_fig = fig
         self.apply_y_limits = False
+
+    def show_analysis_menu(self):
+        """Affiche le menu en cascade juste en dessous du bouton lors du clic."""
+        # Récupération des coordonnées physiques du bouton à l'écran
+        x = self.select_plot_button.winfo_rootx()
+        y = self.select_plot_button.winfo_rooty() + self.select_plot_button.winfo_height()
+        
+        # Fait apparaître le menu de manière contextuelle
+        self.analysis_menu.post(x, y)
+
+    def _set_current_analysis(self, label, plot_id):
+        """Met à jour les variables de sélection et modifie le texte du bouton."""
+        self.selected_plot_id = plot_id
+        self.selected_plot_label.set(label)
+
         
     def action_grouper_fichiers(self):
         """Déclenche l'ouverture de l'explorateur pour le groupement de fichiers (Option 98)"""

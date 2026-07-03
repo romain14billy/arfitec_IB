@@ -494,7 +494,7 @@ def plot_10(fichiers, datasets, frame=None):
     _integrer_canvas(fig, frame)
     return fig
 
-def plot_11(fichiers, datasets, thickness=0.8, atom_density=8.49e22, fichier_ref="", frame=None):
+def plot_11(fichiers, datasets, fichier_ref="", frame=None):
     """Calcule la section efficace pour un échantillon à partir du rapport ToF pur.
     Le calcul de la transmission est réalisé sur les spectres temporels (ToF) corrigés non groupés.
     Intègre des options pour masquer indépendamment M1 et M2, ainsi qu'un bouton d'accumulation.
@@ -502,9 +502,10 @@ def plot_11(fichiers, datasets, thickness=0.8, atom_density=8.49e22, fichier_ref
     if len(fichiers) < 2:
         print("Erreur : Vous devez avoir au moins un fichier de référence et un échantillon.")
         return
-    
-    E_min = PARAMS['E_min']
-    E_max = PARAMS['E_max']    
+    thickness    = PARAMS['thickness']
+    atom_density = PARAMS['atom_density']
+    E_min        = PARAMS['E_min']
+    E_max        = PARAMS['E_max']    
     
     nom_flux0 = fichiers[0]
     nom_sample = fichiers[1]
@@ -536,17 +537,17 @@ def plot_11(fichiers, datasets, thickness=0.8, atom_density=8.49e22, fichier_ref
                 try:
                     nom_fichier_base, E_ref, sigma_ref, unc_ref, mask_ref, E_plot = read_reference_file(ref_path, E_min, E_max)
                     # choose color: first ref in black, others from cycle
-                    if i_ref == 0:
-                        color = 'black'
+                    import random
+                    color = 'black' if i_ref == 0 else random.choice(['red', 'green', 'purple', 'brown', 'pink', 'olive', 'darkgray'])
 
                     if unc_ref is not None:
                         p_ref = ax.errorbar(E_plot, sigma_ref[mask_ref], yerr=unc_ref[mask_ref], 
-                                             fmt='-', linewidth=1.5, label=f"Ref: {nom_fichier_base}")
+                                             fmt='-', color=color, linewidth=1.5, label=f"Ref: {nom_fichier_base}")
                         # soften errorbars alpha if black
                         if color == 'black':
                             p_ref[2][0].set_color((0, 0, 0, 0.2))
                     else:
-                        ax.plot(E_plot, sigma_ref[mask_ref], '-', linewidth=1.5, label=f"Ref: {nom_fichier_base}")
+                        ax.plot(E_plot, sigma_ref[mask_ref], '-', color=color, linewidth=1.5, label=f"Ref: {nom_fichier_base}")
 
                     # compute amplitude estimate for this reference
                     try:
@@ -715,8 +716,10 @@ def plot_11(fichiers, datasets, thickness=0.8, atom_density=8.49e22, fichier_ref
     _integrer_canvas(fig, frame)
     return fig
 
-def plot_12(fichiers, datasets, thickness=0.8, atom_density=8.49e22, fichier_ref="", frame=None):
+def plot_12(fichiers, datasets, fichier_ref="", frame=None):
     """Prend les variables interactives directement en arguments."""
+    thickness = PARAMS['thickness']
+    atom_density = PARAMS['atom_density']
     E_min = PARAMS['E_min']
     E_max = PARAMS['E_max']
     
