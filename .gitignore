@@ -8,3 +8,10 @@ badfile*
 *__pycache__/
 *.vscode*
 .DS_Store
+!cu250626_1_grp_grp.dat
+!tl250626_1_grp.dat
+!Cu_txs_ncrystal.dat
+!tl110626_1.dat
+!tl110626_2.dat
+!tl110626_3.dat
+!set-tot.cu.dat
