@@ -1,531 +1,567 @@
-DEFINE INSTRUMENT template_simple(use_sample=1, Nkds=10, source=1)
+DEFINE INSTRUMENT template_simple(Nkds=10)
 
-DECLARE
-%{
+// DECLARE & USERVAR 
+  DECLARE
+  %{
 
-double epsilon;
+  double epsilon;
 
-/* Ecran */
-double e1;
-double L1;
-double r1;
+  double thickness_neutron_screen;
+  double screen_size;
+  double radius_screen_hole;
 
+  double collimator1_length;
+  double collimator2_length;
 
-/* Longueurs */
+  double thickness_cadmium;
+  double thickness_polyethylene;
 
-double L2;
-double L3;
-
-double e_cd;
-double e_poly;
-
-
-/* Rayon */
-
-double r2_ext;
-double r3_ext;
-
-double r2_int_in;
-double r2_int_out;
-
-double r3_int;
+  double collimator1_radius;
+  double collimator2_radius;
+  double collimator1_front_hole_radius;
+  double collimator1_back_hole_radius;
+  double collimator2_hole_radius;
 
 
-%}
+  %}
 
-USERVARS
-%{
-%}
+  USERVARS
+  %{
+  %}
+// INITIALIZE
+  INITIALIZE
+  %{
 
-INITIALIZE
-%{
+  epsilon = 1e-6;
 
-epsilon = 1e-6;
+  thickness_neutron_screen = 0.07;
+  screen_size = 0.21;
+  radius_screen_hole = 0.025;
 
-e1 = 0.07;
-L1 = 0.21;
-r1 = 0.025;
+  collimator1_length = 0.380;
+  collimator2_length = 0.587;
 
+  thickness_cadmium = 0.001;
+  thickness_polyethylene = 0.050;
 
+  collimator1_radius = 0.051;
+  collimator2_radius = 0.070;
+  collimator1_front_hole_radius = 0.018;
+  collimator1_back_hole_radius = 0.0075;
+  collimator2_hole_radius = 0.010; //front hole radius = back hole radius//
 
-L2 = 0.380;
-L3 = 0.587;
+  %}
+// source
+  TRACE
 
-e_cd = 0.001;
-e_poly = 0.050;
+  COMPONENT origin = Progress_bar()
+  AT (0, 0, 0) RELATIVE ABSOLUTE
 
-r2_ext = 0.051;
-r3_ext = 0.070;
+  COMPONENT source = KDSource(
+    filename = "/Users/romainbilly/Documents/ARGENTINE/kdsource/jose_50/3_bw_opti_surfcircle.xml",
+  nloop=Nkds) 
+  AT (0, 0, 0) RELATIVE  ABSOLUTE
+// UNION1 : neutron screen + fixed slit
+  COMPONENT center_neutron_screen = Arm()
+  AT (0,0,0.045) RELATIVE ABSOLUTE
 
-r2_int_in = 0.018;
-r2_int_out = 0.0075;
+  COMPONENT init_1 = Union_init()
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-r3_int = 0.010;
+  COMPONENT diffusion_polyethylene_1 = NCrystal_process(cfg = "Polyethylene_CH2.ncmat", init="init_1")
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-%}
+  COMPONENT diffusion_cd_1 = NCrystal_process(cfg = "Cd_sg194_cod9012436.ncmat", init="init_1")
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-TRACE
+  COMPONENT polyethylene_1 = Union_make_material(
+  process_string = "diffusion_polyethylene_1",
+  init = "init_1",
+  my_absorption = 0.2229)
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-COMPONENT origin = Progress_bar()
-AT (0, 0, 0) RELATIVE ABSOLUTE
+  COMPONENT cadmium_1 = Union_make_material(
+    process_string = "diffusion_cd_1",
+    init = "init_1",
+    my_absorption = 10230)
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-/* ------------------------------------------------------------------
-   Source Maxwellienne
-   ------------------------------------------------------------------ */
+  COMPONENT air_process_1 = NCrystal_process(
+  cfg = "gasmix::air/25C/1.0atm/0.30relhumidity",
+  init = "init_1" )
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-COMPONENT source1 = KDSource(
-  filename = "/home2/home/rbilly/simulation_nahuel/instrument_mcstas/kds/1_bw_cst.xml",
-nloop=Nkds) 
-WHEN (source = 1)
- AT (0, 0, 0) RELATIVE  ABSOLUTE
+  COMPONENT air_1 = Union_make_material(
+  process_string = "air_process_1", my_absorption = 0.00726555,
+  refraction_SLD = 4.15904E-09, init = "init_1" )
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-
- COMPONENT source2 = KDSource(
-  filename = "/home2/home/rbilly/simulation_nahuel/instrument_mcstas/kds/2_bw_cst_epi.xml",
-nloop=Nkds) 
- WHEN (source = 2)
-
-
-
- AT (0, 0, 0) RELATIVE  ABSOLUTE
-
- COMPONENT e_log0 = Monitor_nD(
-  xwidth = 0.1524,
-  yheight = 0.0762,
-  options="log energy",   // log-spaced energy axis
-  bins=1000,
-  min=1,                   // meV
-  max=10,              // meV
-  filename="e_log0.dat",
-  restore_neutron=1)
-AT (0,0,0.01) RELATIVE PREVIOUS
-
-
-COMPONENT arm1 = Arm()
-AT (0,0,0.045) RELATIVE ABSOLUTE
-
-COMPONENT init_1 = Union_init()
-AT (0,0,0) RELATIVE arm1
-
-COMPONENT diffusion_polyethylene_1 = NCrystal_process(cfg = "Polyethylene_CH2.ncmat", init="init_1")
-AT (0,0,0) RELATIVE arm1
-
-COMPONENT polyethylene_1 = Union_make_material(
- process_string = "diffusion_polyethylene_1",
- init = "init_1",
- my_absorption = 0.2229)
-AT (0,0,0) RELATIVE arm1
-
-COMPONENT cadmium_1 = Union_make_material(
- process_string = "diffusion_polyethylene_1",
- init = "init_1",
- my_absorption = 10230)
-AT (0,0,0) RELATIVE arm1
-
-
-COMPONENT box_cd_1 = Union_box(
-    xwidth = L1,
-    yheight = L1,
-    zdepth = e1,
+  COMPONENT box_cd_1 = Union_box(
+    xwidth = screen_size,
+    yheight = screen_size,
+    zdepth = thickness_neutron_screen,
     priority = 10,
     material_string = "cadmium_1",
     init = "init_1")
-AT (0,0,0) RELATIVE arm1
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-COMPONENT box_poly_1 = Union_box(
-    xwidth = L1-2*e_cd,
-    yheight = L1-2*e_cd,
-    zdepth = e1-2*e_cd,
+  COMPONENT box_poly_1 = Union_box(
+    xwidth = screen_size-2*thickness_cadmium,
+    yheight = screen_size-2*thickness_cadmium,
+    zdepth = thickness_neutron_screen-2*thickness_cadmium,
     priority = 20,
     material_string = "polyethylene_1",
     init = "init_1")
-AT (0,0,0) RELATIVE arm1
+  AT (0,0,0) RELATIVE center_neutron_screen
 
-COMPONENT cylindre_cd_1 = Union_cylinder(
-    yheight = e1-epsilon,
-    radius = r1+2*e_cd,
+  COMPONENT cylindrthickness_cadmium_1 = Union_cylinder(
+    yheight = thickness_neutron_screen-epsilon,
+    radius = radius_screen_hole+2*thickness_cadmium,
     priority = 30,
     material_string = "cadmium_1",
     init = "init_1")
-AT (0,0,0) RELATIVE arm1
-ROTATED (90,0,0) RELATIVE ABSOLUTE
+  AT (0,0,0) RELATIVE center_neutron_screen
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
 
-COMPONENT cylindre_vacuum_1 = Union_cylinder(
-    yheight = e1+epsilon,
-    radius = r1,
+  COMPONENT cylindre_hole_1 = Union_cylinder(
+    yheight = thickness_neutron_screen+epsilon,
+    radius = radius_screen_hole,
     priority = 40,
-    material_string = "Vacuum",
+    material_string = "air_1",
     init = "init_1")
-AT (0,0,0) RELATIVE arm1
-ROTATED (90,0,0) RELATIVE ABSOLUTE
+  AT (0,0,0) RELATIVE center_neutron_screen
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
 
-COMPONENT slit1_cd = Union_box(
-    xwidth = L1,
-    yheight = L1,
-    zdepth = e_cd,
+  COMPONENT slit1_cd = Union_box(
+    xwidth = screen_size,
+    yheight = screen_size,
+    zdepth = thickness_cadmium,
     priority = 50,
     material_string = "cadmium_1",
     init = "init_1")
-AT (0,0,0.06) RELATIVE arm1
+  AT (0,0,0.06) RELATIVE center_neutron_screen
 
-COMPONENT slit1_hole = Union_box(
+  COMPONENT slit1_hole = Union_box(
     xwidth = 0.0035,
     yheight = 0.01,
-    zdepth = e_cd+epsilon,
+    zdepth = thickness_cadmium+epsilon,
     priority = 60,
-    material_string = "Vacuum",
+    material_string = "air_1",
     init = "init_1")
-AT (0,0,0.06) RELATIVE arm1
+  AT (0,0,0.06) RELATIVE center_neutron_screen
 
-COMPONENT master_1 = Union_master(init = "init_1")
-AT (0,0,1) RELATIVE arm1
+  COMPONENT master_1 = Union_master(init = "init_1")
+  AT (0,0,1) RELATIVE center_neutron_screen
 
-COMPONENT stop_1 = Union_stop()
-AT (0,0,0) RELATIVE arm1
-
-
-COMPONENT chopper = CadmiumDiskChopper(
-  xwidth = 0.001,
-  radius = 0.07,
-  yheight = 0.01,
-  nu = 66.666,
-  nslit = 1,
-  isfirst = 1,
-  n_pulse = 3,
-  proba = 0.5,
-  thick = 0.1
-  )
-AT (0,0,0.13) RELATIVE ABSOLUTE
-
-
-COMPONENT arm2 = Arm()
-AT (0,0,0.3065) RELATIVE chopper
-
-COMPONENT init_2 = Union_init()
-AT (0,0,0) RELATIVE arm2
-
-COMPONENT diffusion_polyethylene_2 = NCrystal_process(cfg = "Polyethylene_CH2.ncmat", init="init_2")
-AT (0,0,0) RELATIVE arm2
-
-COMPONENT diffusion_cd_2 = NCrystal_process(cfg = "Cd_sg194_cod9012436.ncmat", init="init_2")
-AT (0,0,0) RELATIVE arm2
-
-COMPONENT polyethylene_2 = Union_make_material(
- process_string = "diffusion_polyethylene_2",
- init = "init_2",
- my_absorption = 0.2229)
-AT (0,0,0) RELATIVE arm2
-
-COMPONENT cadmium_2 = Union_make_material(
- process_string = "diffusion_cd_2",
- init = "init_2",
- my_absorption = 10230)
-AT (0,0,0) RELATIVE arm2
-
-
-COMPONENT slit2_cd = Union_box(
-    xwidth = L1,
-    yheight = L1,
-    zdepth = e_cd,
-    priority = 2,
-    material_string = "cadmium_2",
-    init = "init_2")
-AT (0,0,-L2/2-0.05) RELATIVE arm2
-
-COMPONENT slit2_hole = Union_box(
-    xwidth = 0.0035,
+  COMPONENT stop_1 = Union_stop()
+  AT (0,0,0) RELATIVE center_neutron_screen
+// Chopper
+  COMPONENT chopper = CadmiumDiskChopper(
+    xwidth = 0.001,
+    radius = 0.07,
     yheight = 0.01,
-    zdepth = e_cd+epsilon,
-    priority = 3,
-    material_string = "Vacuum",
-    init = "init_2")
-AT (0,0,-L2/2-0.05) RELATIVE arm2
+    nu = 66.666,
+    nslit = 3,
+    isfirst = 1,
+    n_pulse = 3,
+    proba = -1,
+    thick = 0.1
+    )
+  AT (0,0,0.13) RELATIVE ABSOLUTE
+// UNION2 : material definition
+  COMPONENT center_collimator1 = Arm()
+  AT (0,0,0.3065) RELATIVE chopper
+
+    COMPONENT init = Union_init()
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT diffusion_polyboron = NCrystal_process(cfg = "phases<0.8613*Polyethylene_CH2.ncmat&0.1387*BO3H3_sg2_BoricAcid.ncmat>;temp=300K")
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT polyboron = Union_make_material(
+  process_string = "diffusion_polyboron",
+  my_absorption = 19.3744)
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT diffusion_borated_paraffin = NCrystal_process(cfg = "phases<0.715*solid::CH2/0.90gcm3&0.285*BO3H3_sg2_BoricAcid.ncmat>;temp=300K")
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT borated_paraffin = Union_make_material(
+  process_string = "diffusion_borated_paraffin",
+  my_absorption = 38.4492)
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT diffusion_He = NCrystal_process(cfg = "gasmix::He/10bar/He_is_He3")
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT He3 = Union_make_material(
+  process_string = "diffusion_He",
+  my_absorption = 5333)
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT diffusion_cd = NCrystal_process(cfg = "Cd_sg194_cod9012436.ncmat")
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT cadmium = Union_make_material(
+  process_string = "diffusion_cd",
+  my_absorption = 10230)
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT diffusion_pb = NCrystal_process(cfg = "Pb_sg225.ncmat")
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT lead = Union_make_material(
+  process_string = "diffusion_pb",
+  my_absorption = 0.171)
+  AT (0,0,0) RELATIVE  center_collimator1
+
+  COMPONENT diffusion_polyethylene = NCrystal_process(cfg = "Polyethylene_CH2.ncmat")
+  AT (0,0,0) RELATIVE center_collimator1
+
+  COMPONENT polyethylene = Union_make_material(
+  process_string = "diffusion_polyethylene",
+  my_absorption = 0.2229)
+  AT (0,0,0) RELATIVE center_collimator1
 
 
-/*==========================================================
-  COLLIMATEUR 2
-==========================================================*/
+  COMPONENT air_process = NCrystal_process(
+  cfg = "gasmix::air/25C/1.0atm/0.30relhumidity" )
+  AT (0,0,0) RELATIVE center_collimator1
 
-COMPONENT cd_tube_outer_2 = Union_cylinder(
-    yheight = L2-epsilon,
-    radius = r2_ext,
-    priority = 10,
-    material_string = "cadmium_2",
-    init = "init_2")
-AT (0,0,0) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
+  COMPONENT air = Union_make_material(
+  process_string = "air_process", my_absorption = 0.00726555,
+  refraction_SLD = 4.15904E-09 )
+  AT (0,0,0) RELATIVE center_collimator1
 
+// UNION2 : fixed slit + collimator1
 
-COMPONENT cd_front_2 = Union_cylinder(
-    yheight = e_cd,
-    radius = r2_ext-epsilon,
-    priority = 30,
-    material_string = "cadmium_2",
-    init = "init_2")
-AT (0,0,-L2/2+e_cd/2) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
+  COMPONENT slit2_cd = Union_box(
+      xwidth = screen_size,
+      yheight = screen_size,
+      zdepth = thickness_cadmium,
+      priority = 1000,
+      material_string = "cadmium")
+  AT (0,0,-collimator1_length/2-0.05) RELATIVE center_collimator1
 
-
-COMPONENT cd_back_2 = Union_cylinder(
-    yheight = e_cd,
-    radius = r2_ext-epsilon,
-    priority = 50,
-    material_string = "cadmium_2",
-    init = "init_2")
-AT (0,0,L2/2-e_cd/2) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT poly_front_2 = Union_cylinder(
-    yheight = e_poly+epsilon,
-    radius = r2_ext-2*e_cd,
-    priority = 70,
-    material_string = "polyethylene_2",
-    init = "init_2")
-AT (0,0,-L2/2+e_poly/2+e_cd) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
+  COMPONENT slit2_hole = Union_box(
+      xwidth = 0.0035,
+      yheight = 0.01,
+      zdepth = thickness_cadmium+epsilon,
+      priority = 1001,
+      material_string = "air")
+  AT (0,0,-collimator1_length/2-0.05) RELATIVE center_collimator1
 
 
-COMPONENT poly_back_2 = Union_cylinder(
-    yheight = e_poly+epsilon,
-    radius = r2_ext-2*e_cd,
-    priority = 90,
-    material_string = "polyethylene_2",
-    init = "init_2")
-AT (0,0,L2/2-e_poly/2-e_cd) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT front_void_2 = Union_cylinder(
-    yheight = e_cd+e_poly+2*epsilon,
-    radius = r2_int_in,
-    priority = 100,
-    material_string = "Vacuum",
-    init = "init_2")
-AT (0,0,-L2/2+e_poly/2+e_cd/2) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT back_void_2 = Union_cylinder(
-    yheight = e_cd+e_poly+2*epsilon,
-    radius = r2_int_out,
-    priority = 110,
-    material_string = "Vacuum",
-    init = "init_2")
-AT (0,0,L2/2-e_poly/2-e_cd/2) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT center_void_2 = Union_cylinder(
-    yheight = L2-2*e_poly-2*e_cd+2*epsilon,
-    radius = r2_ext-2*e_cd,
-    priority = 120,
-    material_string = "Vacuum",
-    init = "init_2")
-AT (0,0,0) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE ABSOLUTE
+  COMPONENT cd_tube_outer_2 = Union_cylinder(
+      yheight = collimator1_length,
+      radius = collimator1_radius,
+      priority = 60,
+      material_string = "cadmium")
+  AT (0,0,0) RELATIVE center_collimator1
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
 
 
-COMPONENT master_2 = Union_master(init = "init_2")
-AT (0,0,0) RELATIVE arm2
-
-COMPONENT stop_2 = Union_stop()
-AT (0,0,0) RELATIVE arm2
-
-
-
-/* ------------------------------------------------------------------
-   Echantillon NCrystal
-   diamètre = 30.1 mm
-   épaisseur = 6.65 mm
-   ------------------------------------------------------------------ */
-
-COMPONENT sample = NCrystal_sample(
-  cfg = "Cu_sg225.ncmat",
-  radius = 0.01505,
-  yheight = 0.00665,
-  multscat = 0
-)
-WHEN (use_sample)
-AT (0,0,0.315) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE arm2
-
-COMPONENT Bg_poly = NCrystal_sample(
-  cfg = "Polyethylene_CH2.ncmat",
-  radius = 0.05,
-  yheight = 0.10,
-  multscat = 0
-)
-WHEN (use_sample=2)
-AT (0,0,0.315) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE arm2
-
-COMPONENT Bg_cd = NCrystal_sample(
-  cfg = "Cd_sg194_cod9012436.ncmat",
-  radius = 0.05,
-  yheight = 0.001,
-  multscat = 0
-)
-WHEN (use_sample=2)
-AT (0,0,0.3655) RELATIVE arm2
-ROTATED (90,0,0) RELATIVE arm2
-
-COMPONENT arm3 = Arm()
-AT (0,0,1.2235) RELATIVE arm2
-
-COMPONENT init_3 = Union_init()
-AT (0,0,0) RELATIVE arm3
-
-COMPONENT diffusion_polyethylene_3 = NCrystal_process(cfg = "Polyethylene_CH2.ncmat", init="init_3")
-AT (0,0,0) RELATIVE arm3
-
-COMPONENT diffusion_cd_3 = NCrystal_process(cfg = "Cd_sg194_cod9012436.ncmat", init="init_3")
-AT (0,0,0) RELATIVE arm3
-
-COMPONENT polyethylene_3 = Union_make_material(
- process_string = "diffusion_polyethylene_3",
- init = "init_3",
- my_absorption = 0.2229)
-AT (0,0,0) RELATIVE arm3
-
-COMPONENT cadmium_3 = Union_make_material(
- process_string = "diffusion_cd_3",
- init = "init_3",
- my_absorption = 10230)
-AT (0,0,0) RELATIVE arm3
-
-/*==========================================================
-  COLLIMATEUR 3
-==========================================================*/
-
-COMPONENT cd_tube_outer_3 = Union_cylinder(
-    yheight = L3-epsilon,
-    radius = r3_ext,
-    priority = 10,
-    material_string = "cadmium_3",
-    init = "init_3")
-AT (0,0,0) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT cd_front_3 = Union_cylinder(
-    yheight = e_cd,
-    radius = r3_ext-epsilon,
-    priority = 30,
-    material_string = "cadmium_3",
-    init = "init_3")
-AT (0,0,-L3/2+e_cd/2) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT cd_back_3 = Union_cylinder(
-    yheight = e_cd,
-    radius = r3_ext-epsilon,
-    priority = 50,
-    material_string = "cadmium_3",
-    init = "init_3")
-AT (0,0,L3/2-e_cd/2) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT poly_front_3 = Union_cylinder(
-    yheight = e_poly+epsilon,
-    radius = r3_ext-2*e_cd,
-    priority = 70,
-    material_string = "polyethylene_3",
-    init = "init_3")
-AT (0,0,-L3/2+e_poly/2+e_cd) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT poly_back_3 = Union_cylinder(
-    yheight = e_poly+epsilon,
-    radius = r3_ext-2*e_cd,
-    priority = 90,
-    material_string = "polyethylene_3",
-    init = "init_3")
-AT (0,0,L3/2-e_poly/2-e_cd) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT front_void_3 = Union_cylinder(
-    yheight = e_cd+e_poly+2*epsilon,
-    radius = r3_int,
-    priority = 100,
-    material_string = "Vacuum",
-    init = "init_3")
-AT (0,0,-L3/2+e_poly/2+e_cd/2) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT back_void_3 = Union_cylinder(
-    yheight = e_cd+e_poly+2*epsilon,
-    radius = r3_int,
-    priority = 110,
-    material_string = "Vacuum",
-    init = "init_3")
-AT (0,0,L3/2-e_poly/2-e_cd/2) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT center_void_3 = Union_cylinder(
-    yheight = L3-2*e_poly-2*e_cd+2*epsilon,
-    radius = r3_ext-2*e_cd,
-    priority = 120,
-    material_string = "Vacuum",
-    init = "init_3")
-AT (0,0,0) RELATIVE arm3
-ROTATED (90,0,0) RELATIVE ABSOLUTE
-
-COMPONENT master_3 = Union_master(init = "init_3")
-AT (0,0,0) RELATIVE arm3
-
-COMPONENT stop_3 = Union_stop()
-AT (0,0,0) RELATIVE arm3
-
-/* ------------------------------------------------------------------
-   TOF monitor
-   6 inch * 3 inch = 15.24 cm * 7.62 cm
-   ------------------------------------------------------------------ */
-
-COMPONENT tof_eff = TOF_efficiency_monitor(
-  nt = 2000,
-  xwidth = 0.1524,
-  yheight = 0.0762,
-  tmin = -5000,
-  tmax = 10000,
-  restore_neutron=1
-)
-AT (0,0,0.3615) RELATIVE arm3
-
-COMPONENT tof = TOF_monitor(
-  nt = 2000,
-  xwidth = 0.1524,
-  yheight = 0.0762,
-  tmin = -5000,
-  tmax = 10000,
-  restore_neutron=1
-)
-AT (0,0,0.3615) RELATIVE arm3
-
-COMPONENT e = E_monitor(
-  nE = 200,
-  xwidth = 0.1524,
-  yheight = 0.0762,
-  Emin = 0,
-  Emax = 305,
-  restore_neutron=1
-)
-AT (0,0,0.00001) RELATIVE PREVIOUS
-
-COMPONENT e_log = Monitor_nD(
-  xwidth = 0.1524,
-  yheight = 0.0762,
-  options="log energy",   // log-spaced energy axis
-  bins=1000,
-  min=1,                   // meV
-  max=10,              // meV
-  filename="e_log.dat",
-  restore_neutron=1)
-AT (0,0,0.00001) RELATIVE PREVIOUS
-
-//COMPONENT mcpl = MCPL_output()
-//AT (0,0,0.00001) RELATIVE PREVIOUS
+  COMPONENT poly_front_2 = Union_cylinder(
+      yheight = thickness_polyethylene,
+      radius = collimator1_radius-2*thickness_cadmium,
+      priority = 70,
+      material_string = "polyethylene"
+       )
+  AT (0,0,-collimator1_length/2+thickness_polyethylene/2+thickness_cadmium) RELATIVE center_collimator1
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
 
 
+  COMPONENT poly_back_2 = Union_cylinder(
+      yheight = thickness_polyethylene,
+      radius = collimator1_radius-2*thickness_cadmium,
+      priority = 90,
+      material_string = "polyethylene"
+       )
+  AT (0,0,collimator1_length/2-thickness_polyethylene/2-thickness_cadmium) RELATIVE center_collimator1
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
 
-FINALLY
-%{
-%}
+  COMPONENT front_void_2 = Union_cylinder(
+      yheight = thickness_cadmium+thickness_polyethylene+epsilon,
+      radius = collimator1_front_hole_radius,
+      priority = 100,
+      material_string = "air"
+       )
+  AT (0,0,-collimator1_length/2+thickness_polyethylene/2+thickness_cadmium/2) RELATIVE center_collimator1
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+  COMPONENT back_void_2 = Union_cylinder(
+      yheight = thickness_cadmium+thickness_polyethylene+epsilon,
+      radius = collimator1_back_hole_radius,
+      priority = 110,
+      material_string = "air"
+       )
+  AT (0,0,collimator1_length/2-thickness_polyethylene/2-thickness_cadmium/2) RELATIVE center_collimator1
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+  COMPONENT center_void_2 = Union_cylinder(
+      yheight = collimator1_length-2*thickness_polyethylene-2*thickness_cadmium+epsilon,
+      radius = collimator1_radius-2*thickness_cadmium+epsilon,
+      priority = 120,
+      material_string = "air"
+       )
+  AT (0,0,0) RELATIVE center_collimator1
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+// UNION2 : Experiment samples
+  
+  // COMPONENT diffusion_cu_2 = NCrystal_process(cfg = "Cu_sg225.ncmat" )
+  // AT (0,0,0) RELATIVE center_collimator1
+  
+  // COMPONENT copper_2 = Union_make_material(
+  // process_string = "diffusion_cu_2",
+  //  ,
+  // my_absorption = 3.78)
+  // AT (0,0,0) RELATIVE center_collimator1
+
+  // COMPONENT sample = Union_cylinder(
+  //   radius = 0.01505,
+  //   yheight = 0.00665,
+  //   priority = 1000,
+  //   material_string = "copper_2",
+  //      
+  // )
+  // AT (0,0,0.315) RELATIVE center_collimator1
+  // ROTATED (90,0,0) RELATIVE center_collimator1
+// UNION2 : collimator2
+  COMPONENT center_collimator2 = Arm()
+  AT (0,0,1.2235) RELATIVE center_collimator1
+
+  COMPONENT cd_tube_outer_3 = Union_cylinder(
+      yheight = collimator2_length,
+      radius = collimator2_radius,
+      priority = 210,
+      material_string = "cadmium"
+       )
+  AT (0,0,0) RELATIVE center_collimator2
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+
+  COMPONENT poly_front_3 = Union_cylinder(
+      yheight = thickness_polyethylene,
+      radius = collimator2_radius-2*thickness_cadmium,
+      priority = 270,
+      material_string = "polyethylene"
+       )
+  AT (0,0,-collimator2_length/2+thickness_polyethylene/2+thickness_cadmium) RELATIVE center_collimator2
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+  COMPONENT poly_back_3 = Union_cylinder(
+      yheight = thickness_polyethylene,
+      radius = collimator2_radius-2*thickness_cadmium,
+      priority = 290,
+      material_string = "polyethylene"
+       )
+  AT (0,0,collimator2_length/2-thickness_polyethylene/2-thickness_cadmium) RELATIVE center_collimator2
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+  COMPONENT front_void_3 = Union_cylinder(
+      yheight = thickness_cadmium+thickness_polyethylene+epsilon,
+      radius = collimator2_hole_radius,
+      priority = 310,
+      material_string = "air"
+       )
+  AT (0,0,-collimator2_length/2+thickness_polyethylene/2+thickness_cadmium/2) RELATIVE center_collimator2
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+  COMPONENT back_void_3 = Union_cylinder(
+      yheight = thickness_cadmium+thickness_polyethylene+epsilon,
+      radius = collimator2_hole_radius,
+      priority = 330,
+      material_string = "air"
+       )
+  AT (0,0,collimator2_length/2-thickness_polyethylene/2-thickness_cadmium/2) RELATIVE center_collimator2
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+  COMPONENT center_void_3 = Union_cylinder(
+      yheight = collimator2_length-2*thickness_polyethylene-2*thickness_cadmium+epsilon,
+      radius = collimator2_radius-2*thickness_cadmium+epsilon,
+      priority = 350,
+      material_string = "air"
+       )
+  AT (0,0,0) RELATIVE center_collimator2
+  ROTATED (90,0,0) RELATIVE ABSOLUTE
+
+
+// UNION2 : detector banq + beamcatcher
+  COMPONENT center_detector_banq = Arm()
+  AT (0,0,1.9) RELATIVE chopper
+
+  COMPONENT beamcatcher_lead = Union_box(
+    material_string = "lead",
+    xwidth = 0.5,
+    yheight = 0.55,
+    zdepth = 0.6,
+    priority = 1)
+  AT (0,0,0.25) RELATIVE center_detector_banq
+
+  COMPONENT beamcatcher_poly = Union_box(
+    material_string = "polyboron",
+    xwidth = 0.4,
+    yheight = 0.45,
+    zdepth = 0.5,
+    priority = 2)
+  AT (0,0,0.25) RELATIVE center_detector_banq
+
+  COMPONENT beamcatcher_vide_centre = Union_box(
+    material_string = "air",
+    xwidth = 0.2,
+    yheight = 0.25,
+    zdepth = 0.3,
+    priority = 3)
+  AT (0,0,0.25) RELATIVE center_detector_banq
+
+  COMPONENT beamcatcher_vide_entree = Union_box(
+    material_string = "air",
+    xwidth = 0.5+epsilon,
+    yheight = 0.55+epsilon,
+    zdepth = 0.15+epsilon,
+    priority = 4)
+  AT (0,0,0.025) RELATIVE center_detector_banq
+
+  COMPONENT brick_paraf = Union_box(
+    material_string = "borated_paraffin",
+    xwidth = 0.5+2*epsilon,
+    yheight = 0.55+2*epsilon,
+    zdepth = 0.2+2*epsilon,
+    priority = 5)
+  AT (0,0,0) RELATIVE center_detector_banq
+
+  COMPONENT hole_brick_paraf = Union_cylinder(
+    material_string = "air",
+    radius = 0.071,
+    yheight = 0.2+3*epsilon,
+    priority = 5.5)
+  AT (0,0,0) RELATIVE center_detector_banq
+  ROTATED (90,0,0) RELATIVE center_detector_banq
+
+
+  COMPONENT boitier_cd_ext = Union_box(
+    material_string = "cadmium",
+    xwidth = 0.4,
+    yheight = 0.2,
+    zdepth = 0.1,
+    priority = 6)
+  AT (0,0,0) RELATIVE center_detector_banq
+
+
+  COMPONENT boitier_poly = Union_box(
+    material_string = "polyboron",
+    xwidth = 0.398,
+    yheight = 0.198,
+    zdepth = 0.098,
+    priority = 7)
+  AT (0,0,0) RELATIVE center_detector_banq
+
+  COMPONENT boitier_cd_int = Union_box(
+    material_string = "cadmium",
+    xwidth = 0.378,
+    yheight = 0.178,
+    zdepth = 0.078,
+    priority = 8)
+  AT (0,0,0) RELATIVE center_detector_banq
+
+  COMPONENT vide_centre = Union_box(
+    material_string = "air",
+    xwidth = 0.376,
+    yheight = 0.176,
+    zdepth = 0.076,
+    priority = 9)
+  AT (0,0,0) RELATIVE center_detector_banq
+
+  COMPONENT cadmium_protection = Union_box(
+    material_string = "cadmium",
+    xwidth = 0.1564,
+    yheight = 0.0822,
+    zdepth = 0.05026,
+    priority = 10)
+  AT (0,0,0) RELATIVE center_detector_banq
+
+  COMPONENT cadmium_protection_hole = Union_box(
+    material_string = "air",
+    xwidth = 0.1544,
+    yheight = 0.0802,
+    zdepth = 0.050260001,
+    priority = 11)
+  AT (0,0,-0.001) RELATIVE center_detector_banq
+
+
+  COMPONENT He3_detecteur_1 = Union_cylinder(
+    material_string = "He3",
+    radius = 0.0127,
+    yheight = 0.15,
+    priority = 12)
+  AT (0,0.0132,-0.01143) RELATIVE center_detector_banq
+  ROTATED (0,0,90) RELATIVE center_detector_banq
+  COMPONENT He3_detecteur_2 = Union_cylinder(
+    material_string = "He3",
+    radius = 0.0127,
+    yheight = 0.15,
+    priority = 13)
+  AT (0,-0.0132,-0.01143) RELATIVE center_detector_banq
+  ROTATED (0,0,90) RELATIVE center_detector_banq
+  COMPONENT He3_detecteur_3 = Union_cylinder(
+    material_string = "He3",
+    radius = 0.0127,
+    yheight = 0.15,
+    priority = 14)
+  AT (0,0,0.01143) RELATIVE center_detector_banq
+  ROTATED (0,0,90) RELATIVE center_detector_banq
+  COMPONENT He3_detecteur_4 = Union_cylinder(
+    material_string = "He3",
+    radius = 0.0127,
+    yheight = 0.15,
+    priority = 15)
+  AT (0,0.0264,0.01143) RELATIVE center_detector_banq
+  ROTATED (0,0,90) RELATIVE center_detector_banq
+  COMPONENT He3_detecteur_5 = Union_cylinder(
+    material_string = "He3",
+    radius = 0.0127,
+    yheight = 0.16,
+    priority = 16)
+  AT (0,-0.0264,0.01143) RELATIVE center_detector_banq
+  ROTATED (0,0,90) RELATIVE center_detector_banq
+
+  COMPONENT vide_entree = Union_cylinder(
+    material_string = "air",
+    radius = 0.07,
+    yheight = 0.022+epsilon,
+    priority = 17)
+  AT (0,0,-0.039) RELATIVE center_detector_banq
+  ROTATED (90,0,0) RELATIVE center_detector_banq
+
+  COMPONENT vide_sortie = Union_cylinder(
+    material_string = "air",
+    radius = 0.07,
+    yheight = 0.02+epsilon,
+    priority = 18)
+  AT (0,0,0.039) RELATIVE center_detector_banq
+  ROTATED (90,0,0) RELATIVE center_detector_banq
+
+
+
+
+  COMPONENT tof_he3 = Union_abs_logger_1D_time(
+      time_min = -0.005,
+      time_max = 0.015,
+      n = 1000,
+      target_geometry = "He3_detecteur_1,He3_detecteur_2,He3_detecteur_3,He3_detecteur_4,He3_detecteur_5",
+      filename = "tof_he3") 
+  AT (0, 0, 0) RELATIVE  center_detector_banq
+
+
+
+  COMPONENT master = Union_master()
+  AT (0,0,0) RELATIVE center_detector_banq
+
+  COMPONENT stop = Union_stop()
+  AT (0,0,0) RELATIVE center_detector_banq
+
+  FINALLY
+  %{
+  %}
 
 END
-
